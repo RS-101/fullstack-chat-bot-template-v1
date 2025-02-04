@@ -1,24 +1,34 @@
-import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
+import './style.css';
+import { sendMessage, adjustInputWidth } from './send.ts';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="${viteLogo}" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://www.typescriptlang.org/" target="_blank">
-      <img src="${typescriptLogo}" class="logo vanilla" alt="TypeScript logo" />
-    </a>
-    <h1>Vite + TypeScript</h1>
-    <div class="card">
-      <button id="counter" type="button"></button>
+    <!-- chat history -->
+    <div id="chat-history" class="chat-history"></div>
+    <!-- input chat -->
+    <div class="input-group">
+      <span id="measure-span" class="measure-span"></span>
+      <input type="text" id="chat-input" class="chat-input" placeholder="Type your message here" />
+      <button id="send" class="btn btn-primary">Send</button>
     </div>
-    <p class="read-the-docs">
-      Click on the Vite and TypeScript logos to learn more
-    </p>
   </div>
-`
+`;
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+// Select elements once
+const chatInput = document.querySelector<HTMLInputElement>('#chat-input')!;
+const measureSpan = document.querySelector<HTMLSpanElement>('#measure-span')!;
+const sendButton = document.querySelector<HTMLButtonElement>('#send')!;
+const chatHistoryElement = document.querySelector<HTMLDivElement>('#chat-history')!;
+
+// Attach width adjustment to input
+chatInput.addEventListener('input', () => adjustInputWidth(chatInput, measureSpan));
+
+// Handle Enter key press for sending
+chatInput.addEventListener('keypress', (event) => {
+  if (event.key === 'Enter') {
+    sendButton.click(); // Simulate button click to trigger `sendMessage`
+  }
+});
+
+// Set up message sending with the selected elements
+sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan);
