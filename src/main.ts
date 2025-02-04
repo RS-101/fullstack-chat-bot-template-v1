@@ -14,21 +14,26 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 `;
 
-// Select elements once
-const chatInput = document.querySelector<HTMLInputElement>('#chat-input')!;
-const measureSpan = document.querySelector<HTMLSpanElement>('#measure-span')!;
-const sendButton = document.querySelector<HTMLButtonElement>('#send')!;
-const chatHistoryElement = document.querySelector<HTMLDivElement>('#chat-history')!;
+document.addEventListener('DOMContentLoaded', () => {
+  // Select elements
+  const chatInput = document.querySelector<HTMLInputElement>('#chat-input')!;
+  const measureSpan = document.querySelector<HTMLSpanElement>('#measure-span')!;
+  const sendButton = document.querySelector<HTMLButtonElement>('#send')!;
+  const chatHistoryElement = document.querySelector<HTMLDivElement>('#chat-history')!;
 
-// Attach width adjustment to input
-chatInput.addEventListener('input', () => adjustInputWidth(chatInput, measureSpan));
+  // Adjust input width on load
+  adjustInputWidth(chatInput, measureSpan);
 
-// Handle Enter key press for sending
-chatInput.addEventListener('keypress', (event) => {
-  if (event.key === 'Enter') {
-    sendButton.click(); // Simulate button click to trigger `sendMessage`
-  }
+  // Attach width adjustment to input
+  chatInput.addEventListener('input', () => adjustInputWidth(chatInput, measureSpan));
+
+  // Handle Enter key press for sending
+  chatInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+      sendButton.click(); // Simulate button click to trigger `sendMessage`
+    }
+  });
+
+  // Set up message sending with the selected elements
+  sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan);
 });
-
-// Set up message sending with the selected elements
-sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan);

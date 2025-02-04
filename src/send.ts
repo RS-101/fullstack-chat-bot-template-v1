@@ -47,7 +47,7 @@ export function sendMessage(
 export function adjustInputWidth(input: HTMLInputElement, measureSpan: HTMLSpanElement) {
   measureSpan.textContent = input.value || input.placeholder;
   measureSpan.style.font = window.getComputedStyle(input).font;
-  input.style.width = `${measureSpan.offsetWidth-20}px`; // Adjust for padding
+  input.style.width = `${measureSpan.offsetWidth-15}px`; // Adjust for padding
 }
 
 import axios from "axios";
