@@ -23,7 +23,7 @@ async def get_data(request: MessageRequest):
     # Log received message
     print(f"Received message: {request.message}")
     
-    response = ollama.chat(model='deepseek-r1:1.5b', messages=[{'role': 'user', 'content': request.message}])
+    response = ollama.chat(model='deepseek-r1:7b', messages=[{'role': 'user', 'content': request.message}])
 
     # Print the response
     print(response['message']['content'])

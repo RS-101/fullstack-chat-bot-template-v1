@@ -11,6 +11,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <input type="text" id="chat-input" class="chat-input" placeholder="Type your message here" />
       <button id="send" class="btn btn-primary">Send</button>
     </div>
+    <div id="chat-container" class="chat-history"></div>
   </div>
 `;
 
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const measureSpan = document.querySelector<HTMLSpanElement>('#measure-span')!;
   const sendButton = document.querySelector<HTMLButtonElement>('#send')!;
   const chatHistoryElement = document.querySelector<HTMLDivElement>('#chat-history')!;
+  const chatContainer = document.querySelector<HTMLDivElement>('#chat-container')!;
 
   // Adjust input width on load
   adjustInputWidth(chatInput, measureSpan);
@@ -35,5 +37,5 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Set up message sending with the selected elements
-  sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan);
+  sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan, chatContainer);
 });
