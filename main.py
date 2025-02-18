@@ -2,22 +2,77 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import ollama
+import httpx
 
+# Boolean flag to toggle between Gemini API and Ollama
+USE_GEMINI = True
+
+# Gemini API Configuration
+GEMINI_API_KEY = "AIzaSyAj5Q6mwmZVCFZwyHEg2i3Z0xZKuF3rJpY"
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+# FastAPI App
 app = FastAPI()
 
 # Enable CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Adjust to match your Vite app URL
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Define a request model
+# Request model
 class MessageRequest(BaseModel):
     message: str
+    use_gemini: bool = USE_GEMINI
 
+SYSTEM_PROMPT = """
+You are an intent classifier. Given a user input, classify it into one of the following intents:
+- hello
+- help
+- goodbye
+- info
+- fallback (if it doesn't match any intent)
+
+Respond only with the intent name.
+"""
+
+async def classify_intent_ollama(user_input: str) -> str:
+    """Classifies intent using Ollama."""
+    response = ollama.chat(
+        model="gemma2:2b",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_input},
+        ]
+    )
+    return response['message']['content'].strip().lower()
+
+async def classify_intent_gemini(user_input: str) -> str:
+    """Classifies intent using Gemini API."""
+    payload = {
+        "contents": [{
+            "parts": [{"text": f"{SYSTEM_PROMPT}\nUser input: {user_input}"}]
+        }]
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(GEMINI_API_URL, json=payload)
+        response_data = response.json()
+    
+    try:
+        intent = response_data['candidates'][0]['content']['parts'][0]['text'].strip().lower()
+    except (KeyError, IndexError, TypeError):
+        intent = "fallback"
+    
+    return intent
+
+async def classify_intent(user_input: str, use_gemini: bool) -> str:
+    """Determines which intent classification method to use."""
+    if use_gemini:
+        return await classify_intent_gemini(user_input)
+    return await classify_intent_ollama(user_input)
 
 class ChatNode:
     def __init__(self, name):
@@ -25,11 +80,9 @@ class ChatNode:
         self.intents = {}
 
     def add_intent(self, intent, response):
-        """Maps an intent to a response."""
         self.intents[intent] = response
 
     def get_response(self, intent):
-        """Returns the response if the intent exists."""
         return self.intents.get(intent, None)
 
 class ChatBot:
@@ -41,59 +94,40 @@ class ChatBot:
         self.nodes[node.name] = node
 
     def set_start_node(self, node_name):
-        """Sets the initial chatbot node."""
         self.current_node = self.nodes.get(node_name)
 
-    async def classify_intent(self, user_input):
-        """Uses an LLM to classify user input into an intent."""
-        system_prompt = """
-        You are an intent classifier. Given a user input, classify it into one of the following intents:
-        - hello
-        - help
-        - goodbye
-        - info
-        - fallback (if it doesn't match any intent)
-        
-        Respond only with the intent name.
-        """
-        
-        response = ollama.chat(
-            model="gemma2:2b",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ]
-        )
-        return response['message']['content'].strip().lower()
-
-    async def handle_input(self, user_input):
-        """Classifies user input and returns the appropriate response."""
+    async def handle_input(self, user_input, use_gemini):
         if not self.current_node:
             return "Error: No starting node set."
 
-        # Get classified intent from LLM
-        intent = await self.classify_intent(user_input)
+        intent = await classify_intent(user_input, use_gemini)
         print(f"Intent: {intent}")
-        # Handle recognized intent
         response = self.current_node.get_response(intent)
         if response:
             return response
 
-        # Fallback to AI-generated response if no intent matches
         print(f"No predefined response for intent '{intent}'. Querying AI...")
-        ai_response = ollama.chat(model='gemma2:2b', messages=[{'role': 'user', 'content': user_input}])
-        return ai_response['message']['content']
+        
+        if use_gemini:
+            payload = {"contents": [{"parts": [{"text": user_input}]}]}
+            async with httpx.AsyncClient() as client:
+                ai_response = await client.post(GEMINI_API_URL, json=payload)
+                response_data = ai_response.json()
+                try:
+                    return response_data['candidates'][0]['content']['parts'][0]['text']
+                except (KeyError, IndexError, TypeError):
+                    return "I'm sorry, I couldn't process that request."
+        else:
+            ai_response = ollama.chat(model='gemma2:2b', messages=[{'role': 'user', 'content': user_input}])
+            return ai_response['message']['content']
 
-
-# --- Initialize Chatbot ---
+# Initialize chatbot
 bot = ChatBot()
 
-# Create Nodes
 greeting_node = ChatNode("greeting")
 help_node = ChatNode("help")
 goodbye_node = ChatNode("goodbye")
 
-# Add intents and responses
 greeting_node.add_intent("hello", "Hi there! How can I assist you?")
 greeting_node.add_intent("help", "Sure, I can help! What do you need assistance with?")
 greeting_node.add_intent("goodbye", "Goodbye! Have a great day.")
@@ -103,25 +137,18 @@ help_node.add_intent("back", "Returning to greeting...")
 
 goodbye_node.add_intent("bye", "Farewell! See you next time.")
 
-# Add Nodes to Bot
 bot.add_node(greeting_node)
 bot.add_node(help_node)
 bot.add_node(goodbye_node)
 
-# Set the Start Node
 bot.set_start_node("greeting")
-
 
 @app.post("/api/data")
 async def get_data(request: MessageRequest):
-    """Handles chatbot requests, classifies intent, and responds accordingly."""
-    
     user_input = request.message.strip()
-    response = await bot.handle_input(user_input)
-
+    response = await bot.handle_input(user_input, request.use_gemini)
     print(f"Response: {response}")
     return {"message": response}
-
 
 if __name__ == "__main__":
     import uvicorn

@@ -3,6 +3,15 @@ import { sendMessage, adjustInputWidth } from './send.ts';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
+    <h1>Chatter</hjson1>
+    <!-- Checkbox -->
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" value="" id="use-gemini">
+      <label class="form-check-label" for="use-gemini">
+        Use Gemini
+      </label>
+    </div>
+
     <!-- chat history -->
     <div id="chat-history" class="chat-history"></div>
     <!-- input chat -->
@@ -22,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendButton = document.querySelector<HTMLButtonElement>('#send')!;
   const chatHistoryElement = document.querySelector<HTMLDivElement>('#chat-history')!;
   const chatContainer = document.querySelector<HTMLDivElement>('#chat-container')!;
+  const toggleElement = document.querySelector<HTMLInputElement>('#use-gemini')!;
 
   // Adjust input width on load
   adjustInputWidth(chatInput, measureSpan);
@@ -37,5 +47,5 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Set up message sending with the selected elements
-  sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan, chatContainer);
+  sendMessage(sendButton, chatInput, chatHistoryElement, measureSpan, chatContainer, toggleElement);
 });

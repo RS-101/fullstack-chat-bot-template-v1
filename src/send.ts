@@ -3,7 +3,8 @@ export function sendMessage(
   inputElement: HTMLInputElement,
   chatHistoryElement: HTMLDivElement,
   measureSpan: HTMLSpanElement,
-  chatContainer: HTMLDivElement
+  chatContainer: HTMLDivElement,
+  toggleElement: HTMLInputElement // Checkbox for toggling use_gemini
 ) {
   element.addEventListener("click", async () => {
     const message = inputElement.value.trim();
@@ -12,6 +13,8 @@ export function sendMessage(
     // Create new chat entry container but don't append it yet
     const chatEntry = document.createElement("div");
     chatEntry.classList.add("chat-entry");
+
+    const useGemini = toggleElement.checked; // Get the toggle state
 
     // Create loading indicator
     const loadingIndicator = document.createElement("div");
@@ -30,7 +33,7 @@ export function sendMessage(
 
     try {
       // Wait for backend response
-      const response = await fetchData(message);
+      const response = await fetchData(message, useGemini);
 
       // Stop loading animation
       clearInterval(interval);
@@ -76,10 +79,10 @@ import axios from "axios";
 
 const API_URL = "http://127.0.0.1:8000"; // Python Backend URL
 
-export const fetchData = async (user_message: string) => {
-  try {
+export const fetchData = async (user_message: string, useGemini: boolean) => {  try {
     const response = await axios.post(`${API_URL}/api/data`, {
       message: user_message,
+      use_gemini: useGemini,
     });
     console.log("Response fetched:", response);
     console.log("Data fetched:", response.data);
