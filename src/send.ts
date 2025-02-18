@@ -1,3 +1,5 @@
+import axios from "axios";
+
 export function sendMessage(
   element: HTMLButtonElement,
   inputElement: HTMLInputElement,
@@ -74,8 +76,6 @@ export function adjustInputWidth(input: HTMLInputElement, measureSpan: HTMLSpanE
   measureSpan.style.font = window.getComputedStyle(input).font;
   input.style.width = `${measureSpan.offsetWidth-15}px`; // Adjust for padding
 }
-
-import axios from "axios";
 
 const API_URL = "http://127.0.0.1:8000"; // Python Backend URL
 
