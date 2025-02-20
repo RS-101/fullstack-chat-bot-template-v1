@@ -12,7 +12,6 @@ USE_GEMINI = True
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-# FastAPI App
 app = FastAPI()
 
 # Enable CORS for frontend access
@@ -24,29 +23,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request model
-class MessageRequest(BaseModel):
-    message: str
-    use_gemini: bool = USE_GEMINI
-
-# Updated system prompt with additional intents (removed set_name)
+# System prompt (all lower-case)
 SYSTEM_PROMPT = """
 You are an intent classifier. Given a user input, classify it into one of the following intents:
-- hello
+- greeting
+- i_am_fine
+- book_restaurant
+- restaurant_opening_hours
+- job_opportunities
+- cancel
 - help
+- i_dont_know
+- yes
 - goodbye
-- info
-- merch_tshirt
-- merch_cap
-- merch_shirt
-- merch_watch
-- fallback (if it doesn't match any intent)
+- no
+- fallback
 
 Respond only with the intent name.
 """
 
+class MessageRequest(BaseModel):
+    message: str
+    use_gemini: bool = USE_GEMINI
+
+# ---------------------------
+# Intent Classification Functions
+# ---------------------------
 async def classify_intent_ollama(user_input: str) -> str:
-    """Classifies intent using Ollama."""
     response = ollama.chat(
         model="gemma2:2b",
         messages=[
@@ -54,10 +57,9 @@ async def classify_intent_ollama(user_input: str) -> str:
             {"role": "user", "content": user_input},
         ]
     )
-    return response['message']['content'].strip().lower()
+    return response['message']['content'].strip()
 
 async def classify_intent_gemini(user_input: str) -> str:
-    """Classifies intent using Gemini API."""
     payload = {
         "contents": [{
             "parts": [{"text": f"{SYSTEM_PROMPT}\nUser input: {user_input}"}]
@@ -66,213 +68,320 @@ async def classify_intent_gemini(user_input: str) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.post(GEMINI_API_URL, json=payload)
         response_data = response.json()
-    
     try:
-        intent = response_data['candidates'][0]['content']['parts'][0]['text'].strip().lower()
+        intent = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
     except (KeyError, IndexError, TypeError):
         intent = "fallback"
-    
     return intent
 
 async def classify_intent(user_input: str, use_gemini: bool) -> str:
-    """Determines which intent classification method to use."""
     if use_gemini:
         return await classify_intent_gemini(user_input)
     return await classify_intent_ollama(user_input)
 
-async def extract_name(user_input: str, use_gemini: bool) -> str:
-    """
-    Uses the language model to extract the user's first name from their input.
-    The prompt instructs the model to respond with only the name.
-    """
-    NAME_EXTRACTION_PROMPT = "Extract the person's first name from the following text. Respond with only the name."
-    
+# ---------------------------
+# Extraction Helper Functions
+# ---------------------------
+def clean_extracted_value(value: str) -> str:
+    if value and value.lower().startswith("there is no"):
+        return ""
+    return value
+
+async def extract_date(user_input: str, use_gemini: bool) -> str:
+    prompt = "Extract the date from the following text. Respond with only the date."
     if use_gemini:
-        payload = {
-            "contents": [{
-                "parts": [{"text": f"{NAME_EXTRACTION_PROMPT}\nText: {user_input}"}]
-            }]
-        }
+        payload = {"contents": [{"parts": [{"text": f"{prompt}\nText: {user_input}"}]}]}
         async with httpx.AsyncClient() as client:
             response = await client.post(GEMINI_API_URL, json=payload)
             response_data = response.json()
             try:
-                name = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+                date_val = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
             except (KeyError, IndexError, TypeError):
-                name = ""
-        return name
+                date_val = ""
+        return clean_extracted_value(date_val)
     else:
         response = ollama.chat(
             model="gemma2:2b",
             messages=[
-                {"role": "system", "content": NAME_EXTRACTION_PROMPT},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": user_input},
             ]
         )
+        return clean_extracted_value(response['message']['content'].strip())
 
-        print(response)
-        return response['message']['content'].strip()
+async def extract_time(user_input: str, use_gemini: bool) -> str:
+    prompt = "Extract the time from the following text. Respond with only the time."
+    if use_gemini:
+        payload = {"contents": [{"parts": [{"text": f"{prompt}\nText: {user_input}"}]}]}
+        async with httpx.AsyncClient() as client:
+            response = await client.post(GEMINI_API_URL, json=payload)
+            response_data = response.json()
+            try:
+                time_val = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+            except (KeyError, IndexError, TypeError):
+                time_val = ""
+        return clean_extracted_value(time_val)
+    else:
+        response = ollama.chat(
+            model="gemma2:2b",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_input},
+            ]
+        )
+        return clean_extracted_value(response['message']['content'].strip())
 
+async def extract_number(user_input: str, use_gemini: bool) -> str:
+    prompt = "Extract the number of people from the following text. Respond with only the number."
+    if use_gemini:
+        payload = {"contents": [{"parts": [{"text": f"{prompt}\nText: {user_input}"}]}]}
+        async with httpx.AsyncClient() as client:
+            response = await client.post(GEMINI_API_URL, json=payload)
+            response_data = response.json()
+            try:
+                number_val = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+            except (KeyError, IndexError, TypeError):
+                number_val = ""
+        return clean_extracted_value(number_val)
+    else:
+        response = ollama.chat(
+            model="gemma2:2b",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_input},
+            ]
+        )
+        return clean_extracted_value(response['message']['content'].strip())
+
+# ---------------------------
+# Chat Node and ChatBot Classes
+# ---------------------------
 class ChatNode:
     def __init__(self, name):
         self.name = name
         self.intents = {}
-
+    
     def add_intent(self, intent, response):
-        self.intents[intent] = response
+        self.intents[intent.lower()] = response
 
     def get_response(self, intent):
-        return self.intents.get(intent, None)
+        return self.intents.get(intent.lower(), None)
 
 class ChatBot:
     def __init__(self):
         self.nodes = {}
-        self.current_node = None
-        self.user_data = {}      # Stores variables such as the user's name
-        self.chat_history = []   # Tracks conversation history
-        self.awaiting_name = False  # Flag to indicate the bot is waiting for the user's name
+        self.user_data = {}      # Stores booking details (date, time, number, etc.)
+        self.chat_history = []   # Conversation history
+        self.pending_slot = None # Which slot (date, time, or number) is currently awaited
 
-    def add_node(self, node):
+    def add_node(self, node: ChatNode):
         self.nodes[node.name] = node
 
-    def set_start_node(self, node_name):
-        self.current_node = self.nodes.get(node_name)
-
     async def handle_input(self, user_input, use_gemini):
-        # Append the user message to chat history
         self.chat_history.append("User: " + user_input)
+        print(f"User Input: {user_input}")
 
-        print(f"Current note is :{self.current_node.name}")
+        # If waiting for a pending slot (e.g. date, time, or number), process this input first.
+        if self.pending_slot:
+            if self.pending_slot == "date":
+                extracted = await extract_date(user_input, use_gemini)
+                if not extracted:
+                    response = "I didn't catch the date. When do you want to go?"
+                    self.chat_history.append("Bot: " + response)
+                    return response
+                self.user_data["date"] = extracted
+            elif self.pending_slot == "time":
+                extracted = await extract_time(user_input, use_gemini)
+                if not extracted:
+                    response = "I didn't catch the time. What time do you want to go?"
+                    self.chat_history.append("Bot: " + response)
+                    return response
+                self.user_data["time"] = extracted
+            elif self.pending_slot == "number":
+                extracted = await extract_number(user_input, use_gemini)
+                if not extracted:
+                    response = "I didn't catch the number of people. How many people will be going?"
+                    self.chat_history.append("Bot: " + response)
+                    return response
+                self.user_data["number"] = extracted
 
-        # If we are waiting for the user's name, try to extract it
-        if self.awaiting_name:
-            extracted_name = await extract_name(user_input, use_gemini)
-            if not extracted_name or extracted_name.lower() in ["", "unknown"]:
-                response = "I didn't catch your name. Could you please tell me your name?"
+            # Clear the pending slot after successful extraction.
+            self.pending_slot = None
+
+            # Check for the next missing slot and ask for it immediately.
+            if not self.user_data.get("date"):
+                self.pending_slot = "date"
+                response = "When do you want to go?"
                 self.chat_history.append("Bot: " + response)
                 return response
-            else:
-                self.user_data["name"] = extracted_name
-                self.awaiting_name = False
-                response = f"Nice to meet you, {extracted_name}!"
+            if not self.user_data.get("time"):
+                self.pending_slot = "time"
+                response = "What time do you want to go?"
                 self.chat_history.append("Bot: " + response)
-                # After setting the name, set the current node to greeting
-                self.current_node = self.nodes.get("greeting")
+                return response
+            if not self.user_data.get("number"):
+                self.pending_slot = "number"
+                response = "How many people will be going?"
+                self.chat_history.append("Bot: " + response)
                 return response
 
-        # Determine the intent using the classifier
-        intent = await classify_intent(user_input, use_gemini)
+            # If all details are now collected, confirm the booking.
+            response = self.nodes["booking"].get_response("book_restaurant")
+            response = response.format(date=self.user_data["date"],
+                                       time=self.user_data["time"],
+                                       number=self.user_data["number"])
+            self.chat_history.append("Bot: " + response)
+            return response
+
+        # Classify intent if no pending slot.
+        intent = (await classify_intent(user_input, use_gemini)).lower()
         print(f"Detected Intent: {intent}")
 
-        # If greeted and the name isn't set, ask for the name naturally.
-        if intent == "hello" and "name" not in self.user_data:
-            self.awaiting_name = True
-            response = "Hello! I don't think we've met yet. What's your name?"
+        if intent == "book_restaurant":
+            # Try to extract booking details.
+            extracted_date = await extract_date(user_input, use_gemini)
+            if extracted_date:
+                self.user_data["date"] = extracted_date
+            extracted_time = await extract_time(user_input, use_gemini)
+            if extracted_time:
+                self.user_data["time"] = extracted_time
+            extracted_number = await extract_number(user_input, use_gemini)
+            if extracted_number:
+                self.user_data["number"] = extracted_number
+
+            if not self.user_data.get("date"):
+                self.pending_slot = "date"
+                response = "When do you want to go?"
+                self.chat_history.append("Bot: " + response)
+                return response
+            if not self.user_data.get("time"):
+                self.pending_slot = "time"
+                response = "What time do you want to go?"
+                self.chat_history.append("Bot: " + response)
+                return response
+            if not self.user_data.get("number"):
+                self.pending_slot = "number"
+                response = "How many people will be going?"
+                self.chat_history.append("Bot: " + response)
+                return response
+
+            response = self.nodes["booking"].get_response("book_restaurant")
+            response = response.format(date=self.user_data["date"],
+                                       time=self.user_data["time"],
+                                       number=self.user_data["number"])
             self.chat_history.append("Bot: " + response)
             return response
 
-        response = self.current_node.get_response(intent)
+        elif intent == "yes":
+            # 'Yes' is interpreted as confirmation to start booking if details are missing.
+            if not self.user_data.get("date"):
+                self.pending_slot = "date"
+                response = "When do you want to go?"
+                self.chat_history.append("Bot: " + response)
+                return response
+            if not self.user_data.get("time"):
+                self.pending_slot = "time"
+                response = "What time do you want to go?"
+                self.chat_history.append("Bot: " + response)
+                return response
+            if not self.user_data.get("number"):
+                self.pending_slot = "number"
+                response = "How many people will be going?"
+                self.chat_history.append("Bot: " + response)
+                return response
+            response = self.nodes["booking"].get_response("book_restaurant")
+            response = response.format(date=self.user_data["date"],
+                                       time=self.user_data["time"],
+                                       number=self.user_data["number"])
+            self.chat_history.append("Bot: " + response)
+            return response
 
-        # Transition between nodes based on the detected intent
-        if intent == "help":
-            print("Transitioning to help node...")
-            self.current_node = self.nodes.get("help")
+        elif intent == "restaurant_opening_hours":
+            response = self.nodes["opening_hours"].get_response("restaurant_opening_hours")
+            followup = "Would you like to continue with your restaurant booking?"
+            self.chat_history.append("Bot: " + response)
+            self.chat_history.append("Bot: " + followup)
+            return response + " " + followup
+
+        elif intent == "job_opportunities":
+            response = self.nodes["job"].get_response("job_opportunities")
+            followup = "Would you like to continue with your restaurant booking?"
+            self.chat_history.append("Bot: " + response)
+            self.chat_history.append("Bot: " + followup)
+            return response + " " + followup
+
+        elif intent == "help":
+            response = self.nodes["help"].get_response("help")
+            followup = "Would you like to continue with your restaurant booking?"
+            self.chat_history.append("Bot: " + response)
+            self.chat_history.append("Bot: " + followup)
+            return response + " " + followup
+
+        elif intent == "cancel":
+            response = self.nodes["cancel"].get_response("cancel")
+            self.chat_history.append("Bot: " + response)
+            self.user_data = {}
+            self.pending_slot = None
+            return response
+
+        elif intent in ["greeting", "i_am_fine"]:
+            response = self.nodes["greeting"].get_response(intent)
+            followup = "Would you like to make a restaurant booking?"
+            self.chat_history.append("Bot: " + response)
+            self.chat_history.append("Bot: " + followup)
+            return response + " " + followup
+
         elif intent == "goodbye":
-            print("Transitioning to goodbye node...")
-            self.current_node = self.nodes.get("goodbye")
-        elif intent.startswith("merch_"):
-            print("Transitioning to merch node...")
-            self.current_node = self.nodes.get("merch")
-        elif intent == "hello":
-            print("Transitioning to greeting node...")
-            self.current_node = self.nodes.get("greeting")
-        elif intent == "info":
-            print("Transitioning to info node...")
-            self.current_node = self.nodes.get("info")
-        elif intent == "fallback":
-            print("Transitioning to info greeting note...")
-            self.current_node = self.nodes.get("greeting")
-
-
-        print(f"New note is :{self.current_node.name}")
-
-        if response:
-            # Fill in variables (like {name}) if present
-            response = response.format(name=self.user_data.get("name", "there"))
+            response = self.nodes["goodbye"].get_response("goodbye")
             self.chat_history.append("Bot: " + response)
             return response
 
-        print(f"No predefined response for intent '{intent}'. Querying AI with chat history for context...")
-        # Fallback: query the AI directly with chat history context
-        if use_gemini:
-            history_text = "\n".join(self.chat_history)
-            print(f"Chat history: {history_text}")
-            combined_prompt = f"Conversation history:\n{history_text}\nUser: {user_input}\n"
-            payload = {"contents": [{"parts": [{"text": combined_prompt}]}]}
-            async with httpx.AsyncClient() as client:
-                ai_response = await client.post(GEMINI_API_URL, json=payload)
-                response_data = ai_response.json()
-                try:
-                    fallback_response = response_data['candidates'][0]['content']['parts'][0]['text']
-                except (KeyError, IndexError, TypeError):
-                    fallback_response = "I'm sorry, I couldn't process that request."
-            self.chat_history.append("Bot: " + fallback_response)
-            return fallback_response
         else:
-            # For Ollama, build a messages list including the chat history
-            messages = [{"role": "system", "content": "Please use the conversation history to provide context."}]
-            for entry in self.chat_history:
-                if entry.startswith("User:"):
-                    messages.append({"role": "user", "content": entry})
-                else:
-                    messages.append({"role": "assistant", "content": entry})
-            messages.append({"role": "user", "content": user_input})
-            print(f"Chat history: {messages}")
-            ai_response = ollama.chat(model='gemma2:2b', messages=messages)
-            fallback_response = ai_response['message']['content']
-            self.chat_history.append("Bot: " + fallback_response)
-            return fallback_response
+            response = self.nodes["fallback"].get_response("fallback")
+            self.chat_history.append("Bot: " + response)
+            return response
 
-# Initialize chatbot and its nodes
+# ---------------------------
+# Node Initialization
+# ---------------------------
 bot = ChatBot()
 
-# Greeting Node
-greeting_node = ChatNode("greeting")
-greeting_node.add_intent("hello", "Hi {name}, how can I help you today?")
-greeting_node.add_intent("help", "Sure, I can help! What do you need assistance with?")
-greeting_node.add_intent("goodbye", "Goodbye! Have a great day.")
-greeting_node.add_intent("info", "I can provide information on various topics. Ask me anything!")
+# Booking node (frame response from JSON)
+booking_node = ChatNode("booking")
+booking_node.add_intent("book_restaurant", "OK. I'm making you a reservation on {date} at {time} for {number} people.")
 
-# Help Node
+# Digression nodes
+opening_hours_node = ChatNode("opening_hours")
+opening_hours_node.add_intent("restaurant_opening_hours", "The restaurant is open from 8:00 AM to 10:00 PM.")
+
+job_node = ChatNode("job")
+job_node.add_intent("job_opportunities", "We are always looking for talented people to add to our team. What type of job are you interested in?")
+
+cancel_node = ChatNode("cancel")
+cancel_node.add_intent("cancel", "Ok, cancelling the task. Your booking has been cancelled.")
+
 help_node = ChatNode("help")
-help_node.add_intent("info", "I can provide detailed help on our services. What would you like to know?")
-help_node.add_intent("back", "Returning to the main menu...")
-help_node.add_intent("goodbye", "Goodbye! Have a great day.")
+help_node.add_intent("help", "You can ask me to book a restaurant or inquire about our hours or job openings.")
 
-# Goodbye Node
+greeting_node = ChatNode("greeting")
+greeting_node.add_intent("greeting", "Hello. How can I help you?")
+greeting_node.add_intent("i_am_fine", "Glad to hear that!")
+
+fallback_node = ChatNode("fallback")
+fallback_node.add_intent("fallback", "I didn't understand that. Could you please rephrase?")
+
 goodbye_node = ChatNode("goodbye")
-goodbye_node.add_intent("goodbye", "Farewell! See you next time.")
+goodbye_node.add_intent("goodbye", "Goodbye! Have a great day.")
 
-# Merch Node for handling merchandise inquiries
-merch_node = ChatNode("merch")
-merch_node.add_intent("merch_tshirt", "We have a variety of T-shirts available. Would you like to know more details?")
-merch_node.add_intent("merch_cap", "Our caps are stylish and comfortable. Can I provide more information?")
-merch_node.add_intent("merch_shirt", "We offer premium shirts in various sizes. Interested in a specific style?")
-merch_node.add_intent("merch_watch", "Our watches are elegant and reliable. Are you looking for a specific model?")
-
-# Info Node
-info_node = ChatNode("info")
-info_node.add_intent("info", "Here's some information: We are a demo chatbot built with node-based logic. How else can I assist you?")
-
-# Add nodes to the chatbot
-bot.add_node(greeting_node)
+# Add all nodes to the chatbot.
+bot.add_node(booking_node)
+bot.add_node(opening_hours_node)
+bot.add_node(job_node)
+bot.add_node(cancel_node)
 bot.add_node(help_node)
+bot.add_node(greeting_node)
+bot.add_node(fallback_node)
 bot.add_node(goodbye_node)
-bot.add_node(merch_node)
-bot.add_node(info_node)
-
-# Set the starting node
-bot.set_start_node("greeting")
 
 @app.post("/api/data")
 async def get_data(request: MessageRequest):
