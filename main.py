@@ -36,10 +36,6 @@ You are an intent classifier. Given a user input, classify it into one of the fo
 - help
 - goodbye
 - info
-- merch_tshirt
-- merch_cap
-- merch_shirt
-- merch_watch
 - fallback (if it doesn't match any intent)
 
 Respond only with the intent name.
@@ -180,9 +176,6 @@ class ChatBot:
         elif intent == "goodbye":
             print("Transitioning to goodbye node...")
             self.current_node = self.nodes.get("goodbye")
-        elif intent.startswith("merch_"):
-            print("Transitioning to merch node...")
-            self.current_node = self.nodes.get("merch")
         elif intent == "hello":
             print("Transitioning to greeting node...")
             self.current_node = self.nodes.get("greeting")
@@ -253,13 +246,6 @@ help_node.add_intent("goodbye", "Goodbye! Have a great day.")
 goodbye_node = ChatNode("goodbye")
 goodbye_node.add_intent("goodbye", "Farewell! See you next time.")
 
-# Merch Node for handling merchandise inquiries
-merch_node = ChatNode("merch")
-merch_node.add_intent("merch_tshirt", "We have a variety of T-shirts available. Would you like to know more details?")
-merch_node.add_intent("merch_cap", "Our caps are stylish and comfortable. Can I provide more information?")
-merch_node.add_intent("merch_shirt", "We offer premium shirts in various sizes. Interested in a specific style?")
-merch_node.add_intent("merch_watch", "Our watches are elegant and reliable. Are you looking for a specific model?")
-
 # Info Node
 info_node = ChatNode("info")
 info_node.add_intent("info", "Here's some information: We are a demo chatbot built with node-based logic. How else can I assist you?")
@@ -268,7 +254,6 @@ info_node.add_intent("info", "Here's some information: We are a demo chatbot bui
 bot.add_node(greeting_node)
 bot.add_node(help_node)
 bot.add_node(goodbye_node)
-bot.add_node(merch_node)
 bot.add_node(info_node)
 
 # Set the starting node
