@@ -18,7 +18,13 @@ app = FastAPI()
 # Enable CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",  # Local development
+        "https://limesumsar.dk",  # Your production domain
+        "https://www.limesumsar.dk",  # Optional: Include 'www' if needed
+        "http://limesumsar.dk",  # Your production domain
+        "http://www.limesumsar.dk",  # Optional: Include 'www' if needed
+    ],    
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,16 +47,28 @@ You are an intent classifier. Given a user input, classify it into one of the fo
 Respond only with the intent name.
 """
 
+import ollama
+
 async def classify_intent_ollama(user_input: str) -> str:
-    """Classifies intent using Ollama."""
-    response = ollama.chat(
-        model="gemma2:2b",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ]
-    )
-    return response['message']['content'].strip().lower()
+    """Classifies intent using Ollama with improved error handling."""
+    try:
+        response = ollama.chat(
+            model="gemma2:2b",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_input},
+            ]
+        )
+        return response.get('message', {}).get('content', '').strip().lower()
+    
+    except AttributeError as e:
+        print(f"Attribute error in Ollama module: {e}")
+    except KeyError:
+        print("Unexpected response structure from Ollama.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+         
+    return "ollama_error"
 
 async def classify_intent_gemini(user_input: str) -> str:
     """Classifies intent using Gemini API."""
@@ -66,7 +84,12 @@ async def classify_intent_gemini(user_input: str) -> str:
     try:
         intent = response_data['candidates'][0]['content']['parts'][0]['text'].strip().lower()
     except (KeyError, IndexError, TypeError):
-        intent = "fallback"
+        print("Error classifying intent. Defaulting to fallback.")
+        # print error type
+        print("Error type: ", response_data)
+
+
+        intent = "gemini_error"
     
     return intent
 
@@ -185,6 +208,11 @@ class ChatBot:
         elif intent == "fallback":
             print("Transitioning to info greeting note...")
             self.current_node = self.nodes.get("greeting")
+        elif intent == "ollama_error":
+            return("I'm sorry, I couldn't process that request. Ollama API error.")
+        elif intent == "gemini_error":
+            return("I'm sorry, I couldn't process that request. Gemini API error.")
+
 
 
         print(f"New note is :{self.current_node.name}")
@@ -266,6 +294,10 @@ async def get_data(request: MessageRequest):
     print(f"Response: {response}")
     return {"message": response}
 
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="127.0.0.1", port=8000)
+
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    port = int(os.getenv("PORT", 8080)) 
+    uvicorn.run(app, host="0.0.0.0", port=port) 

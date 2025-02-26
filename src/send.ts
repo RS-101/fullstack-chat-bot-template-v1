@@ -77,7 +77,7 @@ export function adjustInputWidth(input: HTMLInputElement, measureSpan: HTMLSpanE
   input.style.width = `${measureSpan.offsetWidth-15}px`; // Adjust for padding
 }
 
-const API_URL = "http://127.0.0.1:8000"; // Python Backend URL
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
 
 export const fetchData = async (user_message: string, useGemini: boolean) => {  try {
     const response = await axios.post(`${API_URL}/api/data`, {

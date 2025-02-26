@@ -1,0 +1,41 @@
+# Use official Python image
+FROM python:3.11
+
+# Set the working directory
+WORKDIR /app
+
+# Install system dependencies (including Node.js if needed)
+RUN apt update && apt install -y \
+    nodejs npm \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Add Ollama to the system PATH
+ENV PATH="/root/.ollama/bin:${PATH}"
+
+# Verify Ollama installation
+RUN ollama --version
+
+# Preload the Ollama model (gemma2:2b)
+RUN ollama pull gemma2:2b
+
+# Copy Python dependencies file
+COPY requirements.txt .
+
+# Install Python dependencies globally (NO venv)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application files
+COPY . .
+
+# Make the script executable
+RUN chmod +x run_project.sh
+
+# Expose backend and frontend ports
+EXPOSE 8000 5173 11434  # Ollama API runs on port 11434
+
+# Start Ollama in the background and run the project script
+CMD ollama serve & bash ./run_project.sh

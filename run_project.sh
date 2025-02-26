@@ -1,7 +1,15 @@
 #!/bin/bash
 
-# Open first terminal and run the backend
-gnome-terminal -- bash -c "source venv/bin/activate && uvicorn main:app --reload; exec bash"
+# Ensure script fails on error
+set -e
 
-# Open second terminal and run the frontend
-gnome-terminal -- bash -c "npx vite; exec bash"
+# Confirm that uvicorn is installed
+if ! command -v uvicorn &> /dev/null
+then
+    echo "Error: Uvicorn is not installed inside the virtual environment."
+    exit 1
+fi
+
+# Start Backend (FastAPI)
+uvicorn main:app --host 0.0.0.0 --port 8080 --reload &  # Run in background
+
